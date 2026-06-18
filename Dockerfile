@@ -86,9 +86,8 @@ RUN if [ "$PYTORCH_VARIANT" = "rocm" ]; then \
     fi
 
 # Create non-root user for security
-RUN groupadd -r voicebox && \
-    useradd -r -g voicebox -m -s /bin/bash voicebox
-
+RUN groupadd -r -g 1000 voicebox && \
+    useradd -r -g voicebox -u 1000 -m -s /bin/bash voicebox
 # ROCm: add voicebox user to render+video so it can open /dev/kfd and /dev/dri.
 RUN if [ "$PYTORCH_VARIANT" = "rocm" ]; then \
       usermod -aG render,video voicebox; \
@@ -114,6 +113,10 @@ COPY --from=frontend --chown=voicebox:voicebox /build/web/dist /app/frontend/
 # Create data directories owned by non-root user
 RUN mkdir -p /app/data/generations /app/data/profiles /app/data/cache \
     && chown -R voicebox:voicebox /app/data
+
+# Create HuggingFace cache directory for the named volume
+RUN mkdir -p /home/voicebox/.cache/huggingface \
+    && chown -R voicebox:voicebox /home/voicebox/.cache/huggingface
 
 # Switch to non-root user
 USER voicebox
