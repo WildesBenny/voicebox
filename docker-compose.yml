@@ -6,7 +6,7 @@ services:
 
     ports:
       # Bind to localhost only for security
-      - "127.0.0.1:17493:17493"
+      - "17493:17493"
 
     volumes:
       # Bind-mount for generated audio (customize the host path as needed)
