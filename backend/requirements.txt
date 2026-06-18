@@ -8,7 +8,7 @@ sqlalchemy>=2.0.0
 alembic>=1.13.0
 
 # ML models
-torch>=2.2.0
+#torch>=2.2.0
 transformers>=4.36.0,<=4.57.6
 accelerate>=0.26.0
 huggingface_hub>=0.20.0
@@ -38,7 +38,7 @@ pyloudnorm
 # descript-audio-codec is NOT installed — it pulls onnx/tensorboard
 # via descript-audiotools.  A lightweight shim in utils/dac_shim.py
 # provides the only class TADA uses: Snake1d.)
-torchaudio
+#torchaudio
 
 # Kokoro TTS (lightweight 82M-param engine)
 kokoro>=0.9.4

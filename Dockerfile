@@ -58,11 +58,7 @@ RUN if [ "$PYTORCH_VARIANT" = "rocm" ]; then \
         --index-url "https://download.pytorch.org/whl/rocm${ROCM_VERSION}"; \
     fi
 
-# IMPORTANT FIX: prevent CUDA torch overwrite
-RUN sed -i '/^torch/d' backend/requirements.txt && \
-    sed -i '/^torchaudio/d' backend/requirements.txt
-
-RUN pip install --no-cache-dir --prefix=/install -r backend/requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 RUN pip install --no-cache-dir --prefix=/install --no-deps chatterbox-tts
 RUN pip install --no-cache-dir --prefix=/install --no-deps hume-tada
 RUN pip install --no-cache-dir --prefix=/install \
