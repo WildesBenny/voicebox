@@ -52,18 +52,18 @@ ARG ROCM_VERSION=7.2
 # When building the ROCm variant, install the ROCm-enabled PyTorch wheels
 # first so that the subsequent requirements.txt install sees them as already
 # satisfying the torch/torchaudio constraints and leaves them in place.
-RUN if [ "$PYTORCH_VARIANT" = "rocm" ]; then \
-      pip install --no-cache-dir --prefix=/install \
-        torch==2.12.1+rocm7.2 torchaudio==2.11.0+rocm7.2 \
-        --index-url "https://download.pytorch.org/whl/rocm${ROCM_VERSION}"; \
-    fi
-
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 RUN pip install --no-cache-dir --prefix=/install --no-deps chatterbox-tts
 RUN pip install --no-cache-dir --prefix=/install --no-deps hume-tada
 RUN pip install --no-cache-dir --prefix=/install \
     git+https://github.com/QwenLM/Qwen3-TTS.git
 
+
+RUN if [ "$PYTORCH_VARIANT" = "rocm" ]; then \
+      pip install --no-cache-dir --prefix=/install \
+        torch==2.12.1+rocm7.2 torchaudio==2.11.0+rocm7.2 \
+        --index-url "https://download.pytorch.org/whl/rocm${ROCM_VERSION}"; \
+    fi
 
 # === Stage 3: Runtime ===
 FROM python:3.11-slim
