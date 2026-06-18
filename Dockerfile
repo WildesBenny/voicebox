@@ -52,14 +52,17 @@ ARG ROCM_VERSION=7.2
 # When building the ROCm variant, install the ROCm-enabled PyTorch wheels
 # first so that the subsequent requirements.txt install sees them as already
 # satisfying the torch/torchaudio constraints and leaves them in place.
-# The CPU path skips this step and installs torch from PyPI as before.
 RUN if [ "$PYTORCH_VARIANT" = "rocm" ]; then \
       pip install --no-cache-dir --prefix=/install \
-        torch torchaudio \
+        torch==2.2.2+rocm7.2 torchaudio==2.2.2+rocm7.2 \
         --index-url "https://download.pytorch.org/whl/rocm${ROCM_VERSION}"; \
     fi
 
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# IMPORTANT FIX: prevent CUDA torch overwrite
+RUN sed -i '/^torch/d' backend/requirements.txt && \
+    sed -i '/^torchaudio/d' backend/requirements.txt
+
+RUN pip install --no-cache-dir --prefix=/install -r backend/requirements.txt
 RUN pip install --no-cache-dir --prefix=/install --no-deps chatterbox-tts
 RUN pip install --no-cache-dir --prefix=/install --no-deps hume-tada
 RUN pip install --no-cache-dir --prefix=/install \
@@ -76,8 +79,6 @@ ARG PYTORCH_VARIANT=cpu
 # and video groups. GIDs are parameterised to match the host; Ubuntu 22.04+
 # defaults are used here. Override via env vars (docker-compose.rocm.yml
 # passes them through automatically):
-#   export RENDER_GID=$(getent group render | cut -d: -f3)
-#   export VIDEO_GID=$(getent group video  | cut -d: -f3)
 ARG RENDER_GID=992
 ARG VIDEO_GID=44
 RUN if [ "$PYTORCH_VARIANT" = "rocm" ]; then \
@@ -88,6 +89,7 @@ RUN if [ "$PYTORCH_VARIANT" = "rocm" ]; then \
 # Create non-root user for security
 RUN groupadd -r -g 1000 voicebox && \
     useradd -r -g voicebox -u 1000 -m -s /bin/bash voicebox
+
 # ROCm: add voicebox user to render+video so it can open /dev/kfd and /dev/dri.
 RUN if [ "$PYTORCH_VARIANT" = "rocm" ]; then \
       usermod -aG render,video voicebox; \
