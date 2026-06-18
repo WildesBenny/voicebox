@@ -54,7 +54,7 @@ ARG ROCM_VERSION=7.2
 # satisfying the torch/torchaudio constraints and leaves them in place.
 RUN if [ "$PYTORCH_VARIANT" = "rocm" ]; then \
       pip install --no-cache-dir --prefix=/install \
-        torch==2.2.2+rocm7.2 torchaudio==2.2.2+rocm7.2 \
+        torch==2.12.1+rocm7.2 torchaudio==2.12.1+rocm7.2 \
         --index-url "https://download.pytorch.org/whl/rocm${ROCM_VERSION}"; \
     fi
 
