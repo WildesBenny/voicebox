@@ -47,7 +47,7 @@ COPY backend/requirements.txt .
 
 # ROCm version to pull PyTorch wheels for. Default is 6.3 (supports RDNA1/2/3).
 # Set ROCM_VERSION=7.2 for RDNA 4 (RX 9000 series) support.
-ARG ROCM_VERSION=6.3
+ARG ROCM_VERSION=7.2
 
 # When building the ROCm variant, install the ROCm-enabled PyTorch wheels
 # first so that the subsequent requirements.txt install sees them as already

@@ -1,50 +1,50 @@
-# Voicebox — CPU build (default)
-# For AMD ROCm GPU acceleration use the overlay:
-#   docker compose -f docker-compose.yml -f docker-compose.rocm.yml up --build
-
 services:
   voicebox:
-    build: .
+    build:
+      context: .
+      args:
+        PYTORCH_VARIANT: rocm
+        RENDER_GID: 992
+        VIDEO_GID: 44
+        ROCM_VERSION: 7.2
+
     container_name: voicebox
     restart: unless-stopped
 
     ports:
-      # Bind to localhost only for security
       - "17493:17493"
 
     volumes:
-      # Bind-mount for generated audio (customize the host path as needed)
-      # Host side:      ./output/
-      # Container side: /app/data/generations/
       - ./output:/app/data/generations
-
-      # Named volume for profiles, DB, cache (persists across container restarts)
       - voicebox-data:/app/data
-
-      # HuggingFace model cache (so models aren't re-downloaded on rebuild)
       - huggingface-cache:/home/voicebox/.cache/huggingface
 
     environment:
       - LOG_LEVEL=info
       - NUMBA_CACHE_DIR=/tmp/numba_cache
 
+      # Strix Halo (gfx1151)
+      - HSA_OVERRIDE_GFX_VERSION=11.5.1
+
+      # ROCm allocator tuning
+      - PYTORCH_HIP_ALLOC_CONF=garbage_collection_threshold:0.8,max_split_size_mb:512
+
     networks:
       - voicebox-net
 
+    devices:
+      - /dev/kfd
+      - /dev/dri
+
+    group_add:
+      - "992"
+      - "44"
+
     deploy:
       resources:
-
-        # GPU passthrough
-        #reservations:
-        #  devices:
-        #   - driver: nvidia
-        #     count: all
-        #     capabilities: [gpu]
-
-        # Resource limits
         limits:
-          cpus: '4'
-          memory: 8G
+          cpus: '8'
+          memory: 16G
 
 networks:
   voicebox-net:
