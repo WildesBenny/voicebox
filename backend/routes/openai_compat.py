@@ -37,6 +37,11 @@ Limitations
 - ``speed`` is accepted in the schema for API compatibility but is not yet
   forwarded to the TTS backends.  Non-default speed values are silently
   ignored.
+- ``language`` defaults to ``"en"`` (English) for OpenAI SDK compatibility;
+  set it explicitly to use another supported language.
+
+Supported languages: zh, en, ja, ko, de, fr, ru, pt, es, it, he, ar, da, el,
+fi, hi, ms, nl, no, pl, sv, sw, tr
 """
 
 from __future__ import annotations
@@ -89,6 +94,8 @@ class SpeechRequest(BaseModel):
     voice: str = "alloy"
     response_format: Optional[str] = "wav"
     speed: Optional[float] = 1.0
+    # language code (defaults to English for OpenAI SDK compatibility)
+    language: Optional[str] = "en"
     # instructions / system prompt (OpenAI "instruct" equivalent)
     instructions: Optional[str] = None
 
@@ -134,7 +141,7 @@ async def create_speech(
         tts_model,
         request.input,
         voice_prompt,
-        language="en",
+        language=request.language,
         seed=None,
         instruct=request.instructions,
         trim_fn=trim_fn,
