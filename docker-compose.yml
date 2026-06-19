@@ -39,8 +39,8 @@ services:
 
         # Resource limits
         limits:
-          cpus: '4'
-          memory: 8G
+          cpus: '16'
+          memory: 32G
 
 networks:
   voicebox-net:
