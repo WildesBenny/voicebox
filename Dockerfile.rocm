@@ -19,9 +19,9 @@ RUN cd web && bunx --bun vite build
 
 
 # === Stage 2: Build Python dependencies ===
-FROM rocm/dev-ubuntu-24.04:6.4 AS backend-builder
+FROM rocm/dev-ubuntu-24.04:7.2 AS backend-builder
 
-ARG ROCM_INDEX=https://download.pytorch.org/whl/rocm6.4
+ARG ROCM_INDEX=https://download.pytorch.org/whl/rocm7.2
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /build
 
@@ -40,6 +40,7 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN echo "Using PyTorch ROCm index: $ROCM_INDEX"
 
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -50,7 +51,7 @@ RUN pip install --no-cache-dir git+https://github.com/QwenLM/Qwen3-TTS.git
 
 
 # === Stage 3: Runtime ===
-FROM rocm/dev-ubuntu-24.04:6.4
+FROM rocm/dev-ubuntu-24.04:7.2
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV ROCM_HOME=/opt/rocm
