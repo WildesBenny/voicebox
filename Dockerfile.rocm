@@ -63,8 +63,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -r -g 1000 voicebox && \
-    useradd -r -g voicebox -u 1000 -m -s /bin/bash voicebox
+RUN if ! getent group voicebox >/dev/null; then groupadd -r voicebox; fi && \
+    if ! id -u voicebox >/dev/null 2>&1; then useradd -r -g voicebox -m -s /bin/bash voicebox; fi
 
 WORKDIR /app
 
