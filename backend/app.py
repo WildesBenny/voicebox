@@ -193,6 +193,13 @@ def _get_gpu_status() -> str:
         if not compatible:
             label += " [UNSUPPORTED - see logs]"
         return label
+    elif hasattr(torch, "version") and getattr(torch.version, "hip", None):
+        try:
+            if torch.cuda.device_count() > 0:
+                return f"ROCm (device visible to torch, but cuda.is_available() returned False)"
+        except Exception:
+            pass
+        return "ROCm (runtime present, but no visible GPU device)"
     elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         return "MPS (Apple Silicon)"
     elif backend_type == "mlx":
@@ -268,6 +275,14 @@ async def _run_startup(application: FastAPI) -> None:
     backend_type = get_backend_type()
     logger.info("Backend: %s", backend_type.upper())
     logger.info("GPU: %s", _get_gpu_status())
+
+    is_rocm = hasattr(torch, "version") and getattr(torch.version, "hip", None)
+    if is_rocm:
+        try:
+            device_count = torch.cuda.device_count()
+            logger.info("ROCm runtime: torch.cuda.device_count() = %s", device_count)
+        except Exception as exc:
+            logger.warning("ROCm runtime: torch.cuda.device_count() check failed: %s", exc)
 
     from .backends.base import check_cuda_compatibility
 
