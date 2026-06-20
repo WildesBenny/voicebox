@@ -36,14 +36,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --no-cache-dir --upgrade pip
 
 COPY backend/requirements.txt .
-RUN python3 -m pip install --no-cache-dir --prefix=/install -r requirements.txt
-RUN python3 -m pip install --no-cache-dir --prefix=/install --index-url "$ROCM_INDEX" torch torchaudio
-RUN python3 -m pip install --no-cache-dir --prefix=/install --no-deps chatterbox-tts
-RUN python3 -m pip install --no-cache-dir --prefix=/install --no-deps hume-tada
-RUN python3 -m pip install --no-cache-dir --prefix=/install \
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/install --index-url "$ROCM_INDEX" torch torchaudio
+RUN pip install --no-cache-dir --prefix=/install --no-deps chatterbox-tts
+RUN pip install --no-cache-dir --prefix=/install --no-deps hume-tada
+RUN pip install --no-cache-dir --prefix=/install \
     git+https://github.com/QwenLM/Qwen3-TTS.git
 
 
