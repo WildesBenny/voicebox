@@ -47,11 +47,6 @@ services:
 
     ipc: host
     shm_size: 8g
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: ["gpu"]
 
     networks:
       - voicebox-net

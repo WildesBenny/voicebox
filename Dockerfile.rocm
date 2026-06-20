@@ -71,9 +71,12 @@ RUN if ! getent group voicebox >/dev/null; then groupadd -r voicebox; fi && \
 
 WORKDIR /app
 
-COPY --from=backend-builder /install /usr/local
+COPY --from=backend-builder /opt/venv /opt/venv
 COPY --chown=voicebox:voicebox backend/ /app/backend/
 COPY --from=frontend --chown=voicebox:voicebox /build/web/dist /app/frontend/
+
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH=/opt/venv/bin:${PATH}
 
 RUN mkdir -p /app/data/generations /app/data/profiles /app/data/cache \
     /home/voicebox/.cache/huggingface \
@@ -86,4 +89,4 @@ EXPOSE 17493
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
     CMD curl -f http://localhost:17493/health || exit 1
 
-CMD ["python3", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "17493"]
+CMD ["/opt/venv/bin/python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "17493"]
