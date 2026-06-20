@@ -1,0 +1,86 @@
+# ============================================================
+# Voicebox — ROCm-enabled image for AMD GPUs
+# 3-stage build: Frontend → Python deps → Runtime
+# ============================================================
+
+# === Stage 1: Build frontend ===
+FROM oven/bun:1 AS frontend
+
+WORKDIR /build
+
+COPY package.json bun.lock CHANGELOG.md ./
+COPY app/ ./app/
+COPY web/ ./web/
+
+RUN sed -i '/"tauri"/d; /"landing"/d' package.json && \
+    sed -i -z 's/,\n  ]/\n  ]/' package.json
+RUN bun install --no-save
+RUN cd web && bunx --bun vite build
+
+
+# === Stage 2: Build Python dependencies ===
+FROM rocm/dev-ubuntu-24.04:6.4 AS backend-builder
+
+ARG ROCM_INDEX=https://download.pytorch.org/whl/rocm6.4
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    ffmpeg \
+    git \
+    python3 \
+    python3-dev \
+    python3-pip \
+    python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m pip install --no-cache-dir --upgrade pip
+
+COPY backend/requirements.txt .
+RUN python3 -m pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN python3 -m pip install --no-cache-dir --prefix=/install --index-url "$ROCM_INDEX" torch torchaudio
+RUN python3 -m pip install --no-cache-dir --prefix=/install --no-deps chatterbox-tts
+RUN python3 -m pip install --no-cache-dir --prefix=/install --no-deps hume-tada
+RUN python3 -m pip install --no-cache-dir --prefix=/install \
+    git+https://github.com/QwenLM/Qwen3-TTS.git
+
+
+# === Stage 3: Runtime ===
+FROM rocm/dev-ubuntu-24.04:6.4
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ROCM_HOME=/opt/rocm
+ENV PATH=/opt/rocm/bin:${PATH}
+ENV LD_LIBRARY_PATH=/opt/rocm/lib:${LD_LIBRARY_PATH}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ffmpeg \
+    python3 \
+    python3-dev \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r -g 1000 voicebox && \
+    useradd -r -g voicebox -u 1000 -m -s /bin/bash voicebox
+
+WORKDIR /app
+
+COPY --from=backend-builder /install /usr/local
+COPY --chown=voicebox:voicebox backend/ /app/backend/
+COPY --from=frontend --chown=voicebox:voicebox /build/web/dist /app/frontend/
+
+RUN mkdir -p /app/data/generations /app/data/profiles /app/data/cache \
+    /home/voicebox/.cache/huggingface \
+    && chown -R voicebox:voicebox /app/data /home/voicebox/.cache/huggingface
+
+USER voicebox
+
+EXPOSE 17493
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
+    CMD curl -f http://localhost:17493/health || exit 1
+
+CMD ["python3", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "17493"]

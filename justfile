@@ -43,6 +43,32 @@ setup-python:
     fi
     echo "Installing Python dependencies..."
     {{ pip }} install --upgrade pip -q
+    # Linux + AMD GPU: install ROCm PyTorch first so the GPU is usable (HIP is
+    # exposed through torch.cuda). Doing it before requirements.txt means the
+    # ROCm build satisfies `torch>=2.2.0` and isn't replaced by the PyPI CUDA wheel.
+    if [ "$(uname)" = "Linux" ]; then
+        has_amd=0
+        if [ -d /sys/class/kfd/kfd/topology/nodes ] && \
+           grep -qiE '^vendor_id[[:space:]]+(0x1002|4098)' /sys/class/kfd/kfd/topology/nodes/*/properties 2>/dev/null; then
+            has_amd=1
+        elif command -v lspci >/dev/null 2>&1 && \
+             lspci -nn 2>/dev/null | grep -iE 'VGA|Display|3D' | grep -q '\[1002:'; then
+            has_amd=1
+        fi
+        has_nvidia=0
+        if command -v nvidia-smi >/dev/null 2>&1; then
+            has_nvidia=1
+        elif command -v lspci >/dev/null 2>&1 && \
+             lspci -nn 2>/dev/null | grep -iE 'VGA|Display|3D' | grep -q '\[10de:'; then
+            has_nvidia=1
+        fi
+        if [ "$has_amd" = "1" ] && [ "$has_nvidia" = "0" ]; then
+            ROCM_INDEX="${VOICEBOX_ROCM_INDEX:-https://download.pytorch.org/whl/rocm6.4}"
+            echo "Detected AMD GPU — installing ROCm PyTorch from $ROCM_INDEX ..."
+            echo "  (override the channel with VOICEBOX_ROCM_INDEX, e.g. https://download.pytorch.org/whl/rocm7.2)"
+            {{ pip }} install torch torchaudio --index-url "$ROCM_INDEX"
+        fi
+    fi
     {{ pip }} install -r {{ backend_dir }}/requirements.txt
     # Chatterbox pins numpy<1.26 / torch==2.6 which break on Python 3.12+
     {{ pip }} install --no-deps chatterbox-tts
@@ -73,6 +99,7 @@ setup-python:
     Write-Host "Detected GPUs: $($gpus -join ', ')"
     $hasNvidia = ($gpus | Where-Object { $_ -match 'NVIDIA' }).Count -gt 0
     $hasIntelArc = ($gpus | Where-Object { $_ -match 'Arc' }).Count -gt 0
+    $hasAmd = ($gpus | Where-Object { $_ -match 'AMD|Radeon' }).Count -gt 0
     if ($hasNvidia) { \
         Write-Host "NVIDIA GPU detected — installing PyTorch with CUDA support..."; \
         & "{{ pip }}" install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128; \
@@ -80,6 +107,11 @@ setup-python:
         Write-Host "Intel Arc GPU detected — installing PyTorch with XPU support..."; \
         & "{{ pip }}" install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/xpu; \
         & "{{ pip }}" install intel-extension-for-pytorch --index-url https://download.pytorch.org/whl/xpu; \
+    } elseif ($hasAmd) { \
+        Write-Host "AMD GPU detected. ROCm PyTorch on Windows ships via TheRock (community), not PyPI."; \
+        Write-Host "Falling back to CPU PyTorch for now. For GPU acceleration, install a Windows ROCm"; \
+        Write-Host "wheel for your architecture from https://github.com/ROCm/TheRock/blob/main/RELEASES.md"; \
+        Write-Host "then re-run setup. (Linux has first-class ROCm support via `just setup`.)"; \
     } else { \
         Write-Host "No NVIDIA or Intel Arc GPU detected — using CPU-only PyTorch."; \
         Write-Host "If you have an Intel Arc GPU, install XPU support manually:"; \

@@ -5,24 +5,53 @@ services:
     restart: unless-stopped
 
     ports:
-      # Bind to localhost only for security
       - "17493:17493"
 
     volumes:
-      # Bind-mount for generated audio (customize the host path as needed)
-      # Host side:      ./output/
-      # Container side: /app/data/generations/
       - ./output:/app/data/generations
-
-      # Named volume for profiles, DB, cache (persists across container restarts)
       - voicebox-data:/app/data
-
-      # HuggingFace model cache (so models aren't re-downloaded on rebuild)
       - huggingface-cache:/home/voicebox/.cache/huggingface
 
     environment:
       - LOG_LEVEL=info
       - NUMBA_CACHE_DIR=/tmp/numba_cache
+
+    networks:
+      - voicebox-net
+
+  voicebox-rocm:
+    build:
+      context: .
+      dockerfile: Dockerfile.rocm
+    container_name: voicebox-rocm
+    restart: unless-stopped
+
+    ports:
+      - "17494:17493"
+
+    volumes:
+      - ./output:/app/data/generations
+      - voicebox-rocm-data:/app/data
+      - huggingface-cache:/home/voicebox/.cache/huggingface
+
+    environment:
+      - LOG_LEVEL=info
+      - NUMBA_CACHE_DIR=/tmp/numba_cache
+
+    devices:
+      - /dev/kfd
+      - /dev/dri
+
+    group_add:
+      - video
+
+    ipc: host
+    shm_size: 8g
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
 
     networks:
       - voicebox-net
@@ -33,4 +62,5 @@ networks:
 
 volumes:
   voicebox-data:
+  voicebox-rocm-data:
   huggingface-cache:

@@ -1,0 +1,30 @@
+# ROCm-specific PyTorch (AMD GPUs on Linux)
+#
+# AMD GPU acceleration on Linux comes from PyTorch's ROCm/HIP build, which
+# exposes the GPU through the normal torch.cuda API (device="cuda"). The only
+# difference from an NVIDIA install is *where* torch / torchaudio come from:
+# the ROCm wheel index instead of PyPI's CUDA wheels.
+#
+# `just setup` auto-detects an AMD GPU on Linux and installs these for you.
+# To install manually, pick the wheel index that matches your ROCm line and
+# run it BEFORE `pip install -r requirements.txt` so the ROCm build wins:
+#
+#   # ROCm 6.4 (recommended for Ryzen AI Max+ 395 / Strix Halo, gfx1151):
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/rocm6.4
+#
+#   # ROCm 7.x (newest GPUs / RDNA4, requires a ROCm 7 driver stack):
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/rocm7.2
+#
+# See https://pytorch.org/get-started/locally/ for the current ROCm channels.
+#
+# Architecture support / HSA_OVERRIDE_GFX_VERSION:
+#   Voicebox detects your GPU's gfx architecture at startup and, only when the
+#   installed ROCm build doesn't ship kernels for it, sets
+#   HSA_OVERRIDE_GFX_VERSION automatically (see backend/utils/rocm.py).
+#   Natively supported GPUs (e.g. gfx1151 on ROCm 6.4+) are left untouched so
+#   they run their own optimized kernels. Set HSA_OVERRIDE_GFX_VERSION yourself
+#   to force a specific target.
+#
+# This file intentionally lists no packages: torch/torchaudio must be installed
+# from the ROCm `--index-url` above (a plain requirement here would pull the
+# CUDA build from PyPI). The non-torch dependencies live in requirements.txt.

@@ -64,6 +64,7 @@ async def health():
 
     has_cuda = torch.cuda.is_available()
     has_mps = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    is_rocm = has_cuda and bool(getattr(torch.version, "hip", None))
 
     has_xpu = False
     xpu_name = None
@@ -102,7 +103,16 @@ async def health():
     gpu_available = has_cuda or has_mps or has_xpu or has_directml or backend_type == "mlx"
 
     gpu_type = None
-    if has_cuda:
+    if has_cuda and is_rocm:
+        from ..utils.rocm import get_rocm_info
+
+        rocm_info = get_rocm_info()
+        device_name = rocm_info.get("device_name") or torch.cuda.get_device_name(0)
+        gfx_arch = rocm_info.get("gfx_arch")
+        rocm_version = rocm_info.get("rocm_version")
+        label = f"{device_name}, {gfx_arch}" if gfx_arch else device_name
+        gpu_type = f"ROCm {rocm_version} ({label})" if rocm_version else f"ROCm ({label})"
+    elif has_cuda:
         gpu_type = f"CUDA ({torch.cuda.get_device_name(0)})"
     elif has_mps:
         gpu_type = "MPS (Apple Silicon)"
@@ -175,7 +185,7 @@ async def health():
         backend_type=backend_type,
         backend_variant=os.environ.get(
             "VOICEBOX_BACKEND_VARIANT",
-            "cuda" if torch.cuda.is_available() else ("xpu" if has_xpu else "cpu"),
+            "rocm" if is_rocm else ("cuda" if has_cuda else ("xpu" if has_xpu else "cpu")),
         ),
         gpu_compatibility_warning=gpu_compat_warning,
     )

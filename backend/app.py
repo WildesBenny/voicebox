@@ -36,11 +36,14 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# AMD GPU environment variables must be set before torch import
-if not os.environ.get("HSA_OVERRIDE_GFX_VERSION"):
-    os.environ["HSA_OVERRIDE_GFX_VERSION"] = "10.3.0"
-if not os.environ.get("MIOPEN_LOG_LEVEL"):
-    os.environ["MIOPEN_LOG_LEVEL"] = "4"
+# AMD ROCm: detect the GPU architecture and pick the right
+# HSA_OVERRIDE_GFX_VERSION (if any) before torch initializes HIP. Detecting
+# the real architecture means natively supported GPUs (e.g. the Ryzen AI Max+
+# 395 / gfx1151 on ROCm 6.4+) keep their own optimized kernels instead of being
+# forced onto a fallback. No-op on non-AMD systems.
+from .utils.rocm import configure_rocm_environment
+
+configure_rocm_environment()
 
 import torch
 from fastapi import FastAPI

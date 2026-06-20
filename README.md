@@ -271,7 +271,7 @@ Use cases: agent dev loops (dictate a question, hear the answer in a cloned voic
 | ------------------------ | -------------- | ---------------------------------------------- |
 | macOS (Apple Silicon)    | MLX (Metal)    | 4-5x faster via Neural Engine                  |
 | Windows / Linux (NVIDIA) | PyTorch (CUDA) | Auto-downloads CUDA binary from within the app |
-| Linux (AMD)              | PyTorch (ROCm) | Auto-configures HSA_OVERRIDE_GFX_VERSION       |
+| Linux (AMD)              | PyTorch (ROCm) | Detects the GPU's `gfx` arch and only sets `HSA_OVERRIDE_GFX_VERSION` when needed — works on RDNA2/3/4 and the Ryzen AI Max+ 395 (gfx1151) across ROCm 6.4+/7.x |
 | Windows (any GPU)        | DirectML       | Universal Windows GPU support                  |
 | Intel Arc                | IPEX/XPU       | Intel discrete GPU acceleration                |
 | Any                      | CPU            | Works everywhere, just slower                  |

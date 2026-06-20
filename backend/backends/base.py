@@ -138,6 +138,14 @@ def check_cuda_compatibility() -> tuple[bool, str | None]:
     if not torch.cuda.is_available():
         return True, None
 
+    # AMD ROCm builds expose the GPU through torch.cuda but report gfx targets,
+    # not NVIDIA compute capabilities. Defer to the ROCm-specific check so AMD
+    # users don't get NVIDIA/cu128 advice.
+    if getattr(torch.version, "hip", None):
+        from ..utils.rocm import check_rocm_compatibility
+
+        return check_rocm_compatibility()
+
     major, minor = torch.cuda.get_device_capability(0)
     capability = f"{major}.{minor}"
     device_name = torch.cuda.get_device_name(0)
