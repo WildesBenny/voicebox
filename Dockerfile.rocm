@@ -109,7 +109,8 @@ ENV PATH=/opt/venv/bin:${PATH}
 
 RUN mkdir -p /app/data/generations /app/data/profiles /app/data/cache \
     /home/voicebox/.cache/huggingface \
-    && chown -R "$(id -u voicebox):$(id -g voicebox)" /app/data /home/voicebox/.cache/huggingface
+    && chown -R "$(id -u voicebox):$(id -g voicebox)" /app/data /home/voicebox/.cache/huggingface \
+    && usermod -d /home/voicebox voicebox
 
 USER voicebox
 

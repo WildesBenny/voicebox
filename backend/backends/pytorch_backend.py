@@ -119,7 +119,6 @@ class PyTorchTTSBackend:
                         cache_dir=tts_cache_dir,
                         torch_dtype=torch.bfloat16,
                     )
-                    self.model = self.model.to(self.device)
             except RuntimeError as exc:
                 if self.device == "cuda" and getattr(torch.version, "hip", None):
                     logger.warning(
