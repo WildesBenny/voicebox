@@ -37,16 +37,27 @@ services:
     environment:
       - LOG_LEVEL=info
       - NUMBA_CACHE_DIR=/tmp/numba_cache
+      - HIP_VISIBLE_DEVICES=all
+      - HSA_VISIBLE_DEVICES=all
+      - ROCR_VISIBLE_DEVICES=all
+      - ROCM_PATH=/opt/rocm
 
     devices:
-      - /dev/kfd
-      - /dev/dri
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
 
     group_add:
       - video
+      - render
 
     ipc: host
     shm_size: 8g
+    privileged: true
+    cap_add:
+      - SYS_PTRACE
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
 
     networks:
       - voicebox-net
