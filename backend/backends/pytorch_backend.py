@@ -105,20 +105,36 @@ class PyTorchTTSBackend:
             from huggingface_hub import constants as hf_constants
             tts_cache_dir = hf_constants.HF_HUB_CACHE
 
-            if self.device == "cpu":
-                self.model = Qwen3TTSModel.from_pretrained(
-                    model_path,
-                    cache_dir=tts_cache_dir,
-                    torch_dtype=torch.float32,
-                    low_cpu_mem_usage=False,
-                )
-            else:
-                self.model = Qwen3TTSModel.from_pretrained(
-                    model_path,
-                    cache_dir=tts_cache_dir,
-                    device_map=self.device,
-                    torch_dtype=torch.bfloat16,
-                )
+            try:
+                if self.device == "cpu":
+                    self.model = Qwen3TTSModel.from_pretrained(
+                        model_path,
+                        cache_dir=tts_cache_dir,
+                        torch_dtype=torch.float32,
+                        low_cpu_mem_usage=False,
+                    )
+                else:
+                    self.model = Qwen3TTSModel.from_pretrained(
+                        model_path,
+                        cache_dir=tts_cache_dir,
+                        torch_dtype=torch.bfloat16,
+                    )
+                    self.model = self.model.to(self.device)
+            except RuntimeError as exc:
+                if self.device == "cuda" and getattr(torch.version, "hip", None):
+                    logger.warning(
+                        "ROCm model load failed on cuda; retrying on CPU: %s",
+                        exc,
+                    )
+                    self.device = "cpu"
+                    self.model = Qwen3TTSModel.from_pretrained(
+                        model_path,
+                        cache_dir=tts_cache_dir,
+                        torch_dtype=torch.float32,
+                        low_cpu_mem_usage=False,
+                    )
+                else:
+                    raise
 
         self._current_model_size = model_size
         self.model_size = model_size

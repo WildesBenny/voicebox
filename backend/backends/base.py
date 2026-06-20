@@ -101,6 +101,13 @@ def get_torch_device(
     if torch.cuda.is_available():
         return "cuda"
 
+    # ROCm/HIP builds report themselves through the CUDA API even when the
+    # runtime is still in the process of initializing the GPU. Prefer the CUDA
+    # device for ROCm builds so the backend does not silently fall back to CPU
+    # before the GPU is actually attempted.
+    if getattr(torch.version, "hip", None):
+        return "cuda"
+
     if allow_xpu:
         try:
             import intel_extension_for_pytorch  # noqa: F401
