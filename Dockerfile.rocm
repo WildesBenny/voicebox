@@ -59,7 +59,7 @@ Path('/tmp/requirements-no-torch.txt').write_text('\n'.join(lines) + '\n')
 PY
 
 RUN pip install --no-cache-dir -r /tmp/requirements-no-torch.txt
-RUN pip install --no-cache-dir --force-reinstall --index-url "$ROCM_INDEX" --extra-index-url https://download.pytorch.org/whl/cpu 'torch==2.12.1+rocm7.2' 'torchaudio==2.12.1+rocm7.2'
+RUN pip install --no-cache-dir --force-reinstall --index-url "$ROCM_INDEX" --extra-index-url https://download.pytorch.org/whl/cpu 'torch==2.11.0+rocm7.2' 'torchaudio==2.11.0+rocm7.2'
 RUN /opt/venv/bin/python - <<'PY'
 import importlib.util
 import sys
