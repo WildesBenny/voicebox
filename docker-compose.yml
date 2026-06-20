@@ -26,6 +26,7 @@ services:
     container_name: voicebox-rocm
     restart: unless-stopped
     profiles: ["rocm"]
+    user: "1000:1000"
 
     ports:
       - "17493:17493"

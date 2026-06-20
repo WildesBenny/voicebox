@@ -89,8 +89,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN if ! getent group voicebox >/dev/null; then groupadd -r voicebox; fi && \
-    if ! id -u voicebox >/dev/null 2>&1; then useradd -r -g voicebox -m -s /bin/bash voicebox; fi
+RUN if ! getent group voicebox >/dev/null; then groupadd -r -g 1000 voicebox; else groupmod -g 1000 voicebox; fi && \
+    if ! id -u voicebox >/dev/null 2>&1; then useradd -r -u 1000 -g voicebox -m -s /bin/bash voicebox; else usermod -u 1000 -g voicebox voicebox; fi
 
 WORKDIR /app
 
@@ -103,7 +103,7 @@ ENV PATH=/opt/venv/bin:${PATH}
 
 RUN mkdir -p /app/data/generations /app/data/profiles /app/data/cache \
     /home/voicebox/.cache/huggingface \
-    && chown -R voicebox:voicebox /app/data /home/voicebox/.cache/huggingface
+    && chown -R 1000:1000 /app/data /home/voicebox/.cache/huggingface
 
 USER voicebox
 
