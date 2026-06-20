@@ -25,13 +25,14 @@ services:
       dockerfile: Dockerfile.rocm
     container_name: voicebox-rocm
     restart: unless-stopped
+    profiles: ["rocm"]
 
     ports:
-      - "17494:17493"
+      - "17493:17493"
 
     volumes:
       - ./output:/app/data/generations
-      - voicebox-rocm-data:/app/data
+      - voicebox-data:/app/data
       - huggingface-cache:/home/voicebox/.cache/huggingface
 
     environment:
@@ -68,5 +69,4 @@ networks:
 
 volumes:
   voicebox-data:
-  voicebox-rocm-data:
   huggingface-cache:
