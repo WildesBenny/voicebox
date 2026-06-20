@@ -43,8 +43,31 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN echo "Using PyTorch ROCm index: $ROCM_INDEX"
 
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir --index-url "$ROCM_INDEX" torch torchaudio
+RUN python3 - <<'PY'
+from pathlib import Path
+req_path = Path('requirements.txt')
+lines = []
+for line in req_path.read_text().splitlines():
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        lines.append(line)
+        continue
+    if stripped.startswith(('torch', 'torchaudio')):
+        continue
+    lines.append(line)
+Path('/tmp/requirements-no-torch.txt').write_text('\n'.join(lines) + '\n')
+PY
+
+RUN pip install --no-cache-dir -r /tmp/requirements-no-torch.txt
+RUN pip install --no-cache-dir --force-reinstall --index-url "$ROCM_INDEX" --extra-index-url https://download.pytorch.org/whl/cpu 'torch==2.12.1+rocm7.2' 'torchaudio==2.12.1+rocm7.2'
+RUN /opt/venv/bin/python - <<'PY'
+import importlib.util
+import sys
+assert importlib.util.find_spec('torch') is not None, 'torch is not installed'
+import torch
+assert getattr(torch.version, 'hip', None), 'torch is not a ROCm build'
+print('ROCm torch build:', torch.__version__, torch.version.hip)
+PY
 RUN pip install --no-cache-dir --no-deps chatterbox-tts
 RUN pip install --no-cache-dir --no-deps hume-tada
 RUN pip install --no-cache-dir git+https://github.com/QwenLM/Qwen3-TTS.git
@@ -89,4 +112,4 @@ EXPOSE 17493
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
     CMD curl -f http://localhost:17493/health || exit 1
 
-CMD ["/opt/venv/bin/python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "17493"]
+CMD ["/bin/sh", "-c", "/opt/venv/bin/python - <<'PY'\nimport importlib.util\nimport sys\nprint('python', sys.executable)\nprint('torch_installed', importlib.util.find_spec('torch') is not None)\nif importlib.util.find_spec('torch') is not None:\n    import torch\n    print('torch_version', torch.__version__)\n    print('torch_cuda_available', torch.cuda.is_available())\n    print('torch_version_hip', getattr(torch.version, 'hip', None))\n    print('torch_backend', torch.backends.cuda.is_built())\nPY\n/opt/venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 17493"]
