@@ -19,28 +19,34 @@ RUN cd web && bunx --bun vite build
 
 
 # === Stage 2: Build Python dependencies ===
-FROM rocm/dev-ubuntu-24.04:7.2 AS backend-builder
+# Use the ROCm PyTorch image that ships HIP libraries pre-compiled for AMD GPUs.
+# This avoids the "torch.cuda.is_available() == False" problem caused by
+# missing kernels in the generic rocm/dev-ubuntu base image.
+FROM rocm/pytorch:rocm7.2.1_ubuntu24.04_py3.12_pytorch_release_2.9.1 AS backend-builder
 
-ARG ROCM_INDEX=https://download.pytorch.org/whl/rocm7.2
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     curl \
     ffmpeg \
     git \
-    python3 \
-    python3-dev \
-    python3-pip \
-    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
+# PyTorch ROCm is already installed in the base image — verify it works.
+RUN python3 - <<'PY'
+import torch
+assert torch.cuda.is_available(), "torch.cuda.is_available() must be True in the builder"
+print("ROCm torch build:", torch.__version__, torch.version.hip)
+print("GPU count:", torch.cuda.device_count())
+print("GPU 0:", torch.cuda.get_device_name(0))
+PY
+
+# Create a venv so we can install voicebox deps without touching the system Python.
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
-RUN echo "Using PyTorch ROCm index: $ROCM_INDEX"
 
 COPY backend/requirements.txt .
 RUN python3 - <<'PY'
@@ -59,34 +65,27 @@ Path('/tmp/requirements-no-torch.txt').write_text('\n'.join(lines) + '\n')
 PY
 
 RUN pip install --no-cache-dir -r /tmp/requirements-no-torch.txt
-RUN pip install --no-cache-dir --force-reinstall --index-url "$ROCM_INDEX" --extra-index-url https://download.pytorch.org/whl/cpu 'torch==2.11.0+rocm7.2' 'torchaudio==2.11.0+rocm7.2'
-RUN /opt/venv/bin/python - <<'PY'
-import importlib.util
-import sys
-assert importlib.util.find_spec('torch') is not None, 'torch is not installed'
-import torch
-assert getattr(torch.version, 'hip', None), 'torch is not a ROCm build'
-print('ROCm torch build:', torch.__version__, torch.version.hip)
-PY
 RUN pip install --no-cache-dir --no-deps chatterbox-tts
 RUN pip install --no-cache-dir --no-deps hume-tada
 RUN pip install --no-cache-dir git+https://github.com/QwenLM/Qwen3-TTS.git
 
 
 # === Stage 3: Runtime ===
-FROM rocm/dev-ubuntu-24.04:7.2
+FROM rocm/pytorch:rocm7.2.1_ubuntu24.04_py3.12_pytorch_release_2.9.1
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV ROCM_HOME=/opt/rocm
 ENV PATH=/opt/rocm/bin:${PATH}
 ENV LD_LIBRARY_PATH=/opt/rocm/lib:${LD_LIBRARY_PATH}
+ENV HOME=/home/voicebox
+ENV HF_HOME=/home/voicebox/.cache/huggingface
+ENV HF_HUB_CACHE=/home/voicebox/.cache/huggingface/hub
+ENV HUGGINGFACE_HUB_CACHE=/home/voicebox/.cache/huggingface/hub
+ENV TRANSFORMERS_CACHE=/home/voicebox/.cache/transformers
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
-    python3 \
-    python3-dev \
-    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN if ! getent group voicebox >/dev/null; then \
@@ -108,8 +107,8 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH=/opt/venv/bin:${PATH}
 
 RUN mkdir -p /app/data/generations /app/data/profiles /app/data/cache \
-    /home/voicebox/.cache/huggingface \
-    && chown -R "$(id -u voicebox):$(id -g voicebox)" /app/data /home/voicebox/.cache/huggingface \
+    /home/voicebox/.cache/huggingface /home/voicebox/.cache/transformers \
+    && chown -R "$(id -u voicebox):$(id -g voicebox)" /app/data /home/voicebox/.cache/huggingface /home/voicebox/.cache/transformers \
     && usermod -d /home/voicebox voicebox
 
 USER voicebox
@@ -119,4 +118,4 @@ EXPOSE 17493
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
     CMD curl -f http://localhost:17493/health || exit 1
 
-CMD ["/bin/sh", "-c", "echo 'ROCm device nodes:'; ls -l /dev/kfd /dev/dri /dev/dri/* 2>/dev/null || true; /opt/venv/bin/python - <<'PY'\nimport importlib.util\nimport sys\nprint('python', sys.executable)\nprint('torch_installed', importlib.util.find_spec('torch') is not None)\nif importlib.util.find_spec('torch') is not None:\n    import torch\n    print('torch_version', torch.__version__)\n    print('torch_cuda_available', torch.cuda.is_available())\n    print('torch_version_hip', getattr(torch.version, 'hip', None))\n    print('torch_backend', torch.backends.cuda.is_built())\nPY\n/opt/venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 17493"]
+CMD ["/opt/venv/bin/python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "17493"]

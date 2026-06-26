@@ -117,6 +117,7 @@ class PyTorchTTSBackend:
                     self.model = Qwen3TTSModel.from_pretrained(
                         model_path,
                         cache_dir=tts_cache_dir,
+                        device_map=self.device,
                         torch_dtype=torch.bfloat16,
                     )
             except RuntimeError as exc:

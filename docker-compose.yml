@@ -26,7 +26,6 @@ services:
     container_name: voicebox-rocm
     restart: unless-stopped
     profiles: ["rocm"]
-    user: "1000:1000"
 
     ports:
       - "17493:17493"
@@ -45,8 +44,8 @@ services:
       - ROCM_PATH=/opt/rocm
 
     devices:
-      - /dev/kfd:/dev/kfd
-      - /dev/dri:/dev/dri
+      - /dev/kfd
+      - /dev/dri
 
     group_add:
       - video
@@ -54,12 +53,6 @@ services:
 
     ipc: host
     shm_size: 8g
-    privileged: true
-    cap_add:
-      - SYS_PTRACE
-      - SYS_ADMIN
-    security_opt:
-      - seccomp:unconfined
 
     networks:
       - voicebox-net
