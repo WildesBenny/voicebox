@@ -203,11 +203,12 @@ class QwenCustomVoiceBackend:
             if instruct:
                 kwargs["instruct"] = instruct
 
-            # Inference runs with the process's default HF_HUB_OFFLINE
-            # state. Forcing offline here (issue #462) regressed online
-            # users whose libraries issue legitimate metadata lookups
-            # during generation.
-            wavs, sample_rate = self.model.generate_custom_voice(**kwargs)
+            # Estimate max tokens: 12 Hz codec × ~3 sec/word speaking rate × 2× safety
+            # Minimum 256, maximum 2048 — prevents unbounded generation on slow hardware.
+            word_count = max(1, len(text.split()))
+            max_tokens = min(2048, max(256, word_count * 72))
+
+            wavs, sample_rate = self.model.generate_custom_voice(**kwargs, max_new_tokens=max_tokens)
             return wavs[0], sample_rate
 
         audio, sample_rate = await asyncio.to_thread(_generate_sync)

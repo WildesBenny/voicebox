@@ -19,34 +19,56 @@ RUN cd web && bunx --bun vite build
 
 
 # === Stage 2: Build Python dependencies ===
-# Use the ROCm PyTorch image that ships HIP libraries pre-compiled for AMD GPUs.
-# This avoids the "torch.cuda.is_available() == False" problem caused by
-# missing kernels in the generic rocm/dev-ubuntu base image.
-FROM rocm/pytorch:rocm7.2.1_ubuntu24.04_py3.12_pytorch_release_2.9.1 AS backend-builder
+# Build on a clean Ubuntu base and install AMD's *gfx1151-specific* PyTorch
+# wheels from repo.amd.com. Unlike the generic rocm/pytorch image, these wheels
+# bundle MIOpen / rocBLAS kernels compiled and tuned for gfx1151 (Strix Halo),
+# avoiding the slow `GemmFwdRest` convolution fallback that made the Mimi audio
+# codec crawl. They ship torch 2.10.0+rocm7.12.0 (newest ROCm line) and pull the
+# ROCm runtime in as self-contained `rocm-sdk-*` packages — no system /opt/rocm
+# install required.
+FROM ubuntu:24.04 AS backend-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ffmpeg \
+    python3.12 \
+    python3.12-venv \
+    python3.12-dev \
+    build-essential \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python
 
-# PyTorch ROCm is already installed in the base image — verify it works.
-RUN python3 - <<'PY'
-import torch
-assert torch.cuda.is_available(), "torch.cuda.is_available() must be True in the builder"
-print("ROCm torch build:", torch.__version__, torch.version.hip)
-print("GPU count:", torch.cuda.device_count())
-print("GPU 0:", torch.cuda.get_device_name(0))
-PY
-
-# Create a venv so we can install voicebox deps without touching the system Python.
+# Create a venv so we can install voicebox deps in isolation.
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv"
 
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install the gfx1151-tuned ROCm PyTorch FIRST so later requirements (which only
+# declare torch>=2.2) are satisfied by this build instead of a CUDA/CPU wheel
+# from PyPI. The exact `+rocm` local versions are pinned so the resolver can't
+# prefer a higher-numbered CUDA torch from PyPI — only the AMD index carries the
+# `+rocm7.13.0` builds (newest ROCm line with gfx1151-tuned MIOpen/rocBLAS).
+RUN pip install --no-cache-dir \
+    --index-url https://repo.amd.com/rocm/whl/gfx1151/ \
+    --extra-index-url https://pypi.org/simple \
+    "torch==2.11.0+rocm7.13.0" "torchaudio==2.11.0+rocm7.13.0"
+
+# Verify the wheel is a ROCm/HIP build. torch.cuda.is_available() needs real
+# hardware (absent during builds), so we only assert the compile flags here.
+RUN python3 - <<'PY'
+import torch
+assert torch.version.hip is not None, \
+    f"torch must be a ROCm/HIP build, got torch.version.hip={torch.version.hip!r}"
+print("ROCm torch build:", torch.__version__)
+print("HIP version:", torch.version.hip)
+PY
 
 COPY backend/requirements.txt .
 RUN python3 - <<'PY'
@@ -58,7 +80,9 @@ for line in req_path.read_text().splitlines():
     if not stripped or stripped.startswith('#'):
         lines.append(line)
         continue
-    if stripped.startswith(('torch', 'torchaudio')):
+    # Skip torch/torchaudio (already installed from the gfx1151 ROCm index) and
+    # the numpy pin (we upgrade numpy to 2.x after all other installs for scipy)
+    if stripped.startswith(('torch', 'torchaudio', 'numpy')):
         continue
     lines.append(line)
 Path('/tmp/requirements-no-torch.txt').write_text('\n'.join(lines) + '\n')
@@ -69,24 +93,51 @@ RUN pip install --no-cache-dir --no-deps chatterbox-tts
 RUN pip install --no-cache-dir --no-deps hume-tada
 RUN pip install --no-cache-dir git+https://github.com/QwenLM/Qwen3-TTS.git
 
+# Upgrade numpy to 2.x AFTER all other installs so the numpy<2.0 pin in
+# requirements.txt cannot downgrade it. scipy 1.14+ requires numpy._core
+# which only exists in numpy 2.x.
+RUN pip install --no-cache-dir "numpy>=2.0"
+
 
 # === Stage 3: Runtime ===
-FROM rocm/pytorch:rocm7.2.1_ubuntu24.04_py3.12_pytorch_release_2.9.1
+# Clean Ubuntu runtime — the ROCm runtime lives inside the venv (rocm-sdk-*
+# wheels copied with /opt/venv), so no system ROCm install is needed.
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV ROCM_HOME=/opt/rocm
-ENV PATH=/opt/rocm/bin:${PATH}
-ENV LD_LIBRARY_PATH=/opt/rocm/lib:${LD_LIBRARY_PATH}
 ENV HOME=/home/voicebox
 ENV HF_HOME=/home/voicebox/.cache/huggingface
 ENV HF_HUB_CACHE=/home/voicebox/.cache/huggingface/hub
 ENV HUGGINGFACE_HUB_CACHE=/home/voicebox/.cache/huggingface/hub
-ENV TRANSFORMERS_CACHE=/home/voicebox/.cache/transformers
+# ROCm tuning for gfx1151 (Strix Halo): FAST find mode + a bounded MIOpen
+# workspace stop the iGPU from re-searching/over-allocating convolution
+# solvers, and AOTriton enables the efficient-attention kernels. These mirror
+# the proven qwen3-tts-rocm configuration.
+ENV TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1
+ENV MIOPEN_FIND_MODE=FAST
+ENV MIOPEN_WORKSPACE_MAX=1000000000
+# TRANSFORMERS_CACHE is intentionally not set — transformers falls back to
+# {HF_HOME}/hub, which is the same path as HF_HUB_CACHE above. Setting it
+# explicitly to a different path would create a split-cache situation where
+# qwen_tts internal calls (without cache_dir) write empty snapshots elsewhere.
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 \
+    libsndfile1 \
+    libgomp1 \
+    libnuma1 \
+    libatomic1 \
     curl \
     ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+    gosu \
+    sox \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python
+
+COPY scripts/docker-entrypoint-rocm.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 RUN if ! getent group voicebox >/dev/null; then \
         if ! getent group 1000 >/dev/null; then groupadd -r -g 1000 voicebox; else groupadd -r voicebox; fi; \
@@ -108,14 +159,16 @@ ENV PATH=/opt/venv/bin:${PATH}
 
 RUN mkdir -p /app/data/generations /app/data/profiles /app/data/cache \
     /home/voicebox/.cache/huggingface /home/voicebox/.cache/transformers \
-    && chown -R "$(id -u voicebox):$(id -g voicebox)" /app/data /home/voicebox/.cache/huggingface /home/voicebox/.cache/transformers \
+    /home/voicebox/.cache/miopen \
+    && chown -R "$(id -u voicebox):$(id -g voicebox)" /app/data /home/voicebox/.cache \
     && usermod -d /home/voicebox voicebox
 
-USER voicebox
-
+# Container starts as root so the entrypoint can fix volume permissions,
+# then drops to the voicebox user via gosu before exec-ing the server.
 EXPOSE 17493
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
     CMD curl -f http://localhost:17493/health || exit 1
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["/opt/venv/bin/python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "17493"]

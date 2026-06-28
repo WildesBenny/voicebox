@@ -34,14 +34,18 @@ services:
       - ./output:/app/data/generations
       - voicebox-data:/app/data
       - huggingface-cache:/home/voicebox/.cache/huggingface
+      # Persist MIOpen's tuned kernel DB so the iGPU doesn't re-search solvers
+      # on every container restart (MIOPEN_USER_DB_PATH points here).
+      - miopen-cache:/home/voicebox/.cache/miopen
 
     environment:
       - LOG_LEVEL=info
       - NUMBA_CACHE_DIR=/tmp/numba_cache
-      - HIP_VISIBLE_DEVICES=all
-      - HSA_VISIBLE_DEVICES=all
-      - ROCR_VISIBLE_DEVICES=all
-      - ROCM_PATH=/opt/rocm
+      # Pin the HSA target to the native gfx1151 ISA (Strix Halo). Harmless with
+      # the gfx1151-specific wheels and matches the proven qwen3-tts-rocm setup.
+      - HSA_OVERRIDE_GFX_VERSION=11.5.1
+      # Where MIOpen stores its tuned per-config kernel DB (mounted volume above).
+      - MIOPEN_USER_DB_PATH=/home/voicebox/.cache/miopen
 
     devices:
       - /dev/kfd
@@ -49,7 +53,7 @@ services:
 
     group_add:
       - video
-      - render
+      - "992"  # render group GID on host — matches /dev/kfd and /dev/dri/renderD128
 
     ipc: host
     shm_size: 8g
@@ -64,3 +68,4 @@ networks:
 volumes:
   voicebox-data:
   huggingface-cache:
+  miopen-cache:

@@ -9,6 +9,7 @@ landing/
 docs/
 mlx-test/
 scripts/
+!scripts/docker-entrypoint-rocm.sh
 
 # Dependencies & build artifacts (rebuilt in Docker)
 node_modules/
